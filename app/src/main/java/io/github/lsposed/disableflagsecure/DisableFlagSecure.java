@@ -97,13 +97,6 @@ public class DisableFlagSecure extends XposedModule {
             }
         }
 
-        // WifiDisplay (S~Baklava) / OverlayDisplay (S~Baklava) / VirtualDisplay (U~Baklava)
-        try {
-            hookDisplayControl(classLoader);
-        } catch (Throwable t) {
-            log(Log.ERROR, TAG, "hook DisplayControl failed", t);
-        }
-
         // VirtualDisplay with MediaProjection (S~Baklava)
         try {
             hookVirtualDisplayAdapter(classLoader);
@@ -352,35 +345,6 @@ public class DisableFlagSecure extends XposedModule {
         };
         hookMethods(screenCaptureClazz, hooker, "nativeCaptureDisplay");
         hookMethods(screenCaptureClazz, hooker, "nativeCaptureLayers");
-    }
-
-    private void hookDisplayControl(ClassLoader classLoader) throws ClassNotFoundException, NoSuchMethodException {
-        var displayControlClazz = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ?
-                classLoader.loadClass("com.android.server.display.DisplayControl") :
-                SurfaceControl.class;
-        var systemServerCl = displayControlClazz.getClassLoader();
-        var method = displayControlClazz.getDeclaredMethod(
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ?
-                        "createVirtualDisplay" :
-                        "createDisplay", String.class, boolean.class);
-        hookE(method).intercept(chain -> {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                var stackTrace = new Throwable().getStackTrace();
-                for (var frame : stackTrace) {
-                    var name = frame.getMethodName();
-                    try {
-                        if (name.equals("createVirtualDisplayLocked") &&
-                                classLoader.loadClass(frame.getClassName()).getClassLoader() == systemServerCl) {
-                            return chain.proceed();
-                        }
-                    } catch (ClassNotFoundException ignored) {
-                    }
-                }
-            }
-            var args = chain.getArgs().toArray();
-            args[1] = true;
-            return chain.proceed(args);
-        });
     }
 
     private void hookVirtualDisplayAdapter(ClassLoader classLoader) throws ClassNotFoundException {
